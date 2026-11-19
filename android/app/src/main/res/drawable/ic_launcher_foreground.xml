@@ -1,46 +1,69 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="412.58884"
-    android:viewportHeight="412.58887">
-  <group android:translateX="-200.10559"
-      android:translateY="70.82775">
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Gamepad Body Shadow / Glow -->
     <path
-        android:pathData="m365.238,60.458 l-10.055,21.196 -5.804,12.235L0,93.889l-0,83.155l387.31,0l19.09,28.908 19.09,-28.908l387.31,0l-0,-83.155l-349.379,0l-5.804,-12.235 -10.055,-21.196 -10.056,21.196 -5.804,12.235l-25.302,0 -25.302,0l-5.804,-12.235z"
-        android:strokeAlpha="1"
-        android:strokeLineJoin="miter"
-        android:strokeWidth="0.26458332"
-        android:fillColor="#162d50"
-        android:strokeColor="#00000000"
-        android:strokeLineCap="butt"/>
+        android:fillColor="#40000000"
+        android:pathData="M35,41 C27,41 24,49 24,58 C24,68 28,78 34,78 C37,78 40,75 44,71 L48,67 C52,67 56,67 60,67 L64,71 C68,75 71,78 74,78 C80,78 84,68 84,58 C84,49 81,41 73,41 Z"/>
+
+    <!-- Main Gamepad Body (Vibrant Red) -->
     <path
-        android:pathData="M441.06,124.619l-15.875,0l-0,31.75l15.875,0z"
-        android:strokeWidth="0.18791242"
-        android:fillColor="#ffaaee"
-        android:strokeColor="#00000000"
-        android:fillAlpha="1"/>
+        android:fillColor="#E53935"
+        android:pathData="M35,39 C26,39 23,47 23,57 C23,67 27,76 33,76 C36,76 39,73 43,69 L47,65 C52,65 56,65 61,65 L65,69 C69,73 72,76 75,76 C81,76 85,67 85,57 C85,47 82,39 73,39 Z"/>
+
+    <!-- Top Handles / Inner Shadow (Dark Red Accent) -->
     <path
-        android:pathData="M387.615,124.619l-15.875,0l-0,31.75l15.875,0z"
-        android:strokeWidth="0.18791242"
-        android:fillColor="#ffaaee"
-        android:strokeColor="#00000000"
-        android:fillAlpha="1"/>
-    <group>
-      <clip-path android:pathData="m314.217,27.326a79.375,79.375 0,0 1,102.043 0l-51.021,60.805z M 0,0"/>
-      <path
-          android:pathData="M365.238,88.131m-58.208,0a58.208,58.208 0,1 1,116.417 0a58.208,58.208 0,1 1,-116.417 0"
-          android:strokeAlpha="1"
-          android:strokeWidth="8.46666718"
-          android:fillColor="#00000000"
-          android:strokeColor="#162d50"
-          android:fillAlpha="1"/>
-      <path
-          android:pathData="M365.238,88.131m-41.242,0a41.242,41.242 0,1 1,82.484 0a41.242,41.242 0,1 1,-82.484 0"
-          android:strokeAlpha="1"
-          android:strokeWidth="8.46666718"
-          android:fillColor="#00000000"
-          android:strokeColor="#162d50"
-          android:fillAlpha="1"/>
-    </group>
-  </group>
+        android:fillColor="#B71C1C"
+        android:pathData="M35,39 C30,39 25,42 24,48 C26,46 31,45 37,46 C44,47 50,49 54,49 C58,49 64,47 71,46 C77,45 82,46 84,48 C83,42 78,39 73,39 Z"/>
+
+    <!-- Left D-Pad (White/Light Grey) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M33,50 h4 v3 h3 v4 h-3 v3 h-4 v-3 h-3 v-4 h3 Z"/>
+
+    <!-- Right Action Buttons (White circles) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M73,49.5 a2,2 0 1,0 0.01,0 Z"/> <!-- Top Button -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M69,53.5 a2,2 0 1,0 0.01,0 Z"/> <!-- Left Button -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M77,53.5 a2,2 0 1,0 0.01,0 Z"/> <!-- Right Button -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M73,57.5 a2,2 0 1,0 0.01,0 Z"/> <!-- Bottom Button -->
+
+    <!-- Analog Sticks (Dark Charcoal/Black with Red Center Ring) -->
+    <!-- Left Stick -->
+    <path
+        android:fillColor="#1C1C1E"
+        android:pathData="M44,59 a5.5,5.5 0 1,0 0.01,0 Z"/>
+    <path
+        android:fillColor="#E53935"
+        android:pathData="M44,59 a3,3 0 1,0 0.01,0 Z"/>
+    <path
+        android:fillColor="#1C1C1E"
+        android:pathData="M44,59 a1.5,1.5 0 1,0 0.01,0 Z"/>
+
+    <!-- Right Stick -->
+    <path
+        android:fillColor="#1C1C1E"
+        android:pathData="M64,59 a5.5,5.5 0 1,0 0.01,0 Z"/>
+    <path
+        android:fillColor="#E53935"
+        android:pathData="M64,59 a3,3 0 1,0 0.01,0 Z"/>
+    <path
+        android:fillColor="#1C1C1E"
+        android:pathData="M64,59 a1.5,1.5 0 1,0 0.01,0 Z"/>
+
+    <!-- Center Light / PS/Steam Button (White) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,51.5 a2.5,2.5 0 1,0 0.01,0 Z"/>
+
 </vector>

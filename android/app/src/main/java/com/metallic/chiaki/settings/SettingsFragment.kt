@@ -148,6 +148,10 @@ class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 
 		preferenceScreen.findPreference<Preference>(getString(R.string.preferences_export_settings_key))?.setOnPreferenceClickListener { exportSettings(); true }
 		preferenceScreen.findPreference<Preference>(getString(R.string.preferences_import_settings_key))?.setOnPreferenceClickListener { importSettings(); true }
+		preferenceScreen.findPreference<Preference>("steam_controller_settings")?.setOnPreferenceClickListener {
+			startActivity(Intent(context, com.metallic.chiaki.steam.ui.SteamSettingsActivity::class.java))
+			true
+		}
 	}
 
 	override fun onDestroy()

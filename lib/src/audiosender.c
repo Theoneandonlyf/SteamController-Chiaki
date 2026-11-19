@@ -47,10 +47,14 @@ CHIAKI_EXPORT void chiaki_audio_sender_fini(ChiakiAudioSender *audio_sender)
 
 CHIAKI_EXPORT void chiaki_audio_sender_opus_data(ChiakiAudioSender *audio_sender, uint8_t *opus_sender, size_t opus_sender_size)
 {
-    // skip audio packets without encoded audio
-    // if no audio the packet will have only 3 encoded units because there is no entropy in the packet, otherwise should be max of 40
-    if(opus_sender_size != audio_sender->buf_size_per_unit)
+    if(opus_sender_size == 0 || opus_sender_size > audio_sender->buf_size_per_unit)
         return;
+    uint8_t padded_opus[40];
+    memset(padded_opus, 0, sizeof(padded_opus));
+    memcpy(padded_opus, opus_sender, opus_sender_size);
+    uint8_t *opus_data = padded_opus;
+    size_t opus_data_size = audio_sender->buf_size_per_unit;
+
     uint8_t packet_type = 3; // TAKION_PACKET_TYPE_AUDIO
     uint16_t packet_index = htons(audio_sender->frame_index);
     uint16_t frame_index = htons(audio_sender->frame_index + 1);
@@ -75,7 +79,7 @@ CHIAKI_EXPORT void chiaki_audio_sender_opus_data(ChiakiAudioSender *audio_sender
             CHIAKI_LOGE(audio_sender->log, "Error allocating audio frameb");
             return;
         }
-        memcpy(audio_sender->frameb, opus_sender, opus_sender_size);
+        memcpy(audio_sender->frameb, opus_data, opus_data_size);
         return;
     }
     if(!audio_sender->framea)
@@ -86,14 +90,14 @@ CHIAKI_EXPORT void chiaki_audio_sender_opus_data(ChiakiAudioSender *audio_sender
             CHIAKI_LOGE(audio_sender->log, "Error allocating audio framea");
             return;
         }
-        memcpy(audio_sender->framea, opus_sender, opus_sender_size);
+        memcpy(audio_sender->framea, opus_data, opus_data_size);
         return;
     }
     memcpy(audio_sender->frame_buf, audio_sender->frameb, audio_sender->buf_size_per_unit);
     memcpy(audio_sender->frame_buf + audio_sender->buf_size_per_unit, audio_sender->framea, audio_sender->buf_size_per_unit);
-    memcpy(audio_sender->frame_buf + 2 * audio_sender->buf_size_per_unit, opus_sender, opus_sender_size);
-    memcpy(audio_sender->frame_buf, opus_sender, opus_sender_size);
-    memcpy(audio_sender->framea, opus_sender, opus_sender_size);
+    memcpy(audio_sender->frame_buf + 2 * audio_sender->buf_size_per_unit, opus_data, opus_data_size);
+    memcpy(audio_sender->frame_buf, opus_data, opus_data_size);
+    memcpy(audio_sender->framea, opus_data, opus_data_size);
     memcpy(audio_sender->frameb, audio_sender->framea, audio_sender->buf_size_per_unit);
 
     uint32_t filled_packet_size = audio_sender->frame_buf_size + 19 + ps5_packet;

@@ -15,6 +15,9 @@ add_library(chiaki-jni SHARED
         src/main/cpp/audio-output.cpp
         src/main/cpp/circular-fifo.hpp)
 target_link_libraries(chiaki-jni chiaki-lib)
+if(CHIAKI_LIB_ENABLE_OPUS)
+        target_compile_definitions(chiaki-jni PRIVATE STEAM_MIC=1)
+endif()
 
 find_library(ANDROID_LIB_LOG log)
 find_library(ANDROID_LIB_MEDIANDK mediandk)

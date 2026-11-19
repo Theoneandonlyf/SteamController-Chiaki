@@ -28,6 +28,11 @@ set(CHIAKI_VERSION ${CHIAKI_VERSION_MAJOR}.${CHIAKI_VERSION_MINOR}.${CHIAKI_VERS
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 set(CMAKE_CXX_STANDARD 11)
 
+if(ANDROID)
+	set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384")
+	set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384")
+endif()
+
 if(CHIAKI_USE_SYSTEM_JERASURE)
 	if(CHIAKI_USE_SYSTEM_JERASURE STREQUAL AUTO)
 		find_package(Jerasure QUIET)
@@ -81,6 +86,30 @@ if(CHIAKI_LIB_ENABLE_MBEDTLS)
 		set(MBEDX509_LIBRARY mbedx509 CACHE STRING "" FORCE)
 		set(MBEDCRYPTO_LIBRARY mbedcrypto CACHE STRING "" FORCE)
 	endif()
+endif()
+
+if(CHIAKI_LIB_ENABLE_OPUS AND CHIAKI_ENABLE_ANDROID)
+	# Needed for the Opus *encoder* used by the headset microphone (party chat).
+	# Enabled from android/gradle.properties: steamMic=true
+	set(FETCHCONTENT_QUIET CACHE BOOL FALSE)
+	include(FetchContent)
+	FetchContent_Declare(
+		opus
+		GIT_REPOSITORY https://github.com/xiph/opus.git
+		GIT_TAG v1.5.2
+		GIT_PROGRESS TRUE
+	)
+	set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+	set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+	set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+	set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+	set(OPUS_DISABLE_INTRINSICS ON CACHE BOOL "" FORCE)
+	FetchContent_MakeAvailable(opus)
+	# chiaki-lib includes <opus/opus.h>, but Opus keeps its headers directly in include/.
+	file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/opus-include)
+	file(COPY ${opus_SOURCE_DIR}/include/ DESTINATION ${CMAKE_BINARY_DIR}/opus-include/opus)
+	set(Opus_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/opus-include CACHE PATH "" FORCE)
+	set(Opus_LIBRARIES opus CACHE STRING "" FORCE)
 endif()
 
 add_subdirectory(third-party)

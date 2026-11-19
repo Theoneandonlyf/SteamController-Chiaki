@@ -24,6 +24,22 @@ import com.metallic.chiaki.lib.ConnectVideoProfile
 import com.metallic.chiaki.session.*
 import com.metallic.chiaki.touchcontrols.DefaultTouchControlsFragment
 import com.metallic.chiaki.touchcontrols.TouchControlsFragment
+import com.metallic.chiaki.lib.Codec
+import com.metallic.chiaki.lib.VideoFPSPreset
+import com.metallic.chiaki.lib.VideoResolutionPreset
+import com.metallic.chiaki.steam.MicCapture
+import com.metallic.chiaki.steam.PsTarget
+import com.metallic.chiaki.steam.SteamController
+import com.metallic.chiaki.steam.SteamStore
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.widget.TextView
+import android.widget.Toast
+import android.view.Gravity
+import android.graphics.Color
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.rxkotlin.addTo
 import kotlin.math.min
@@ -46,6 +62,30 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 
 	private val uiVisibilityHandler = Handler()
 
+	// --- Steam Controller bridge ---
+	private lateinit var steamStore: SteamStore
+	private var originalConnectInfo: ConnectInfo? = null
+	private var videoDisabled = false
+	private var audioMuted = false
+	private var bridgeStatusView: TextView? = null
+	private var mic: MicCapture? = null
+	private val micPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+		if(granted) startMicIfWanted()
+		else Toast.makeText(this, "Microphone permission denied: party chat is off", Toast.LENGTH_LONG).show()
+	}
+	private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
+		startForegroundServiceCompat()
+	}
+
+	private fun startForegroundServiceCompat()
+	{
+		val serviceIntent = Intent(this, StreamForegroundService::class.java)
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+			startForegroundService(serviceIntent)
+		else
+			startService(serviceIntent)
+	}
+
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
 		super.onCreate(savedInstanceState)
@@ -57,11 +97,22 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 			return
 		}
 
+		SteamController.init(applicationContext)
+		SteamController.streamOpened()
+		steamStore = SteamStore(this)
+		originalConnectInfo = connectInfo
+		videoDisabled = steamStore.videoDisabled
+		// Bridge mode: ask the console for the cheapest stream; nothing is decoded or drawn.
+		val effectiveInfo = if(videoDisabled)
+			connectInfo.copy(videoProfile = ConnectVideoProfile.preset(VideoResolutionPreset.RES_360P, VideoFPSPreset.FPS_30, Codec.CODEC_H264))
+		else connectInfo
+
 		viewModel = ViewModelProvider(this, viewModelFactory {
-			StreamViewModel(application, connectInfo)
+			StreamViewModel(application, effectiveInfo)
 		})[StreamViewModel::class.java]
 
 		viewModel.input.observe(this)
+		setupSteamController()
 
 		binding = ActivityStreamBinding.inflate(layoutInflater)
 		setContentView(binding.root)
@@ -82,7 +133,33 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 			showOverlay()
 		}
 
-// Setup video output based on debanding preference
+		binding.resyncButton.setOnClickListener {
+			reconnect()
+			toast("Resyncing audio/video...")
+			showOverlay()
+		}
+
+		binding.audioSwitch.isChecked = true
+		binding.audioSwitch.setOnCheckedChangeListener { _, isChecked ->
+			audioMuted = !isChecked
+			viewModel.session.session?.setAudioMuted(audioMuted)
+			toast(if(audioMuted) "Audio muted" else "Audio active")
+			showOverlay()
+		}
+
+binding.videoSwitch.isChecked = !videoDisabled
+		binding.videoSwitch.setOnCheckedChangeListener { _, isChecked ->
+			if(isChecked == !videoDisabled)
+				return@setOnCheckedChangeListener
+			steamStore.videoDisabled = !isChecked
+			// The stream profile is fixed at connect time, so restart the session with the new setting.
+			val info = originalConnectInfo
+			finish()
+			if(info != null)
+				startActivity(Intent(this, StreamActivity::class.java).putExtra(EXTRA_CONNECT_INFO, info))
+		}
+
+		// Setup video output based on debanding preference
 		setupVideoOutput()
 		
 		val prefs = Preferences(this)
@@ -99,20 +176,25 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 		viewModel.session.state.observe(this, Observer { this.stateChanged(it) })
 		adjustStreamViewAspect()
 
-		if(Preferences(this).rumbleEnabled)
-		{
-			val vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
-			viewModel.session.rumbleState.observe(this, Observer {
-				val amplitude = min(255, (it.left.toInt() + it.right.toInt()) / 2)
-				vibrator.cancel()
-				if(amplitude == 0)
-					return@Observer
-				if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-					vibrator.vibrate(VibrationEffect.createOneShot(1000, amplitude))
-				else
-					vibrator.vibrate(1000)
-			})
-		}
+		val vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
+		viewModel.session.rumbleState.observe(this, Observer {
+			// Rumble goes to the Steam Controller when it is connected, otherwise to the phone.
+			if(SteamController.isConnected)
+			{
+				SteamController.rumble(it.left.toInt(), it.right.toInt())
+				return@Observer
+			}
+			if(!Preferences(this).rumbleEnabled)
+				return@Observer
+			val amplitude = min(255, (it.left.toInt() + it.right.toInt()) / 2)
+			vibrator.cancel()
+			if(amplitude == 0)
+				return@Observer
+			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+				vibrator.vibrate(VibrationEffect.createOneShot(1000, amplitude))
+			else
+				vibrator.vibrate(1000)
+		})
 	}
 
 	private var debandRenderer: DebandRenderer? = null
@@ -120,7 +202,24 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 	private fun setupVideoOutput() {
 		val prefs = Preferences(this)
 		viewModel.session.detachSurface()
-		
+
+		if (videoDisabled) {
+			// No surface => the native side never starts a video decoder and just drops frames.
+			binding.surfaceView.visibility = View.GONE
+			binding.debandSurfaceView.visibility = View.GONE
+			binding.progressBar.visibility = View.GONE
+			val tv = TextView(this).apply {
+				setTextColor(Color.parseColor("#B0B0B0"))
+				textSize = 16f
+				gravity = Gravity.CENTER
+				text = "Controller bridge mode\nVideo is off, play on your TV"
+			}
+			(binding.root as android.view.ViewGroup).addView(tv, 0, android.widget.FrameLayout.LayoutParams(
+				android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+			bridgeStatusView = tv
+			return
+		}
+
 		if (prefs.debandingEnabled) {
 			// Use GLSurfaceView with debanding shader
 			binding.surfaceView.visibility = View.GONE
@@ -168,30 +267,167 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 		}
 	}
 
+	private val streamActionReceiver = object : android.content.BroadcastReceiver()
+	{
+		override fun onReceive(context: android.content.Context, intent: android.content.Intent)
+		{
+			when(intent.action)
+			{
+				StreamForegroundService.ACTION_END_CONNECTION -> {
+					finish()
+				}
+				StreamForegroundService.ACTION_RESYNC -> {
+					reconnect()
+					toast("Resyncing audio/video...")
+				}
+				StreamForegroundService.ACTION_TOGGLE_AUDIO -> {
+					audioMuted = !audioMuted
+					viewModel.session.session?.setAudioMuted(audioMuted)
+					toast(if(audioMuted) "Audio muted" else "Audio active")
+				}
+			}
+		}
+	}
+
 	override fun onResume()
 	{
 		super.onResume()
 		hideSystemUI()
-		if (Preferences(this).debandingEnabled) {
+		if (!videoDisabled && Preferences(this).debandingEnabled) {
 			binding.debandSurfaceView.onResume()
 		}
 		viewModel.session.resume()
+
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+			ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+		{
+			notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+		}
+		else
+		{
+			startForegroundServiceCompat()
+		}
+
+		val filter = android.content.IntentFilter().apply {
+			addAction(StreamForegroundService.ACTION_END_CONNECTION)
+			addAction(StreamForegroundService.ACTION_RESYNC)
+			addAction(StreamForegroundService.ACTION_TOGGLE_AUDIO)
+		}
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+			registerReceiver(streamActionReceiver, filter, RECEIVER_NOT_EXPORTED)
+		else
+			registerReceiver(streamActionReceiver, filter)
 	}
 
 	override fun onPause()
 	{
 		super.onPause()
-		if (Preferences(this).debandingEnabled) {
+		if (!videoDisabled && Preferences(this).debandingEnabled) {
 			binding.debandSurfaceView.onPause()
 		}
-		viewModel.session.pause()
 	}
 
 	override fun onDestroy()
 	{
 		super.onDestroy()
+		stopMic()
+		viewModel.session.pause()
+		try { unregisterReceiver(streamActionReceiver) } catch(_: Exception) {}
+		stopService(Intent(this, StreamForegroundService::class.java))
+
+		if(SteamController.onAction === steamActionCallback) SteamController.onAction = null
+		if(SteamController.onStatusChanged === steamStatusCallback) SteamController.onStatusChanged = null
+		viewModel.input.detachSteamController()
+		SteamController.streamClosed()
 		debandRenderer?.release()
 		controlsDisposable.dispose()
+	}
+
+	private val steamActionCallback: (PsTarget) -> Unit = { action ->
+		when(action)
+		{
+			PsTarget.ACT_MIC_MUTE ->
+			{
+				val m = mic
+				if(m == null) toast("Microphone is not active")
+				else toast(if(m.toggleMute()) "Mic muted" else "Mic live")
+			}
+			PsTarget.ACT_GYRO_TOGGLE -> toast("Gyro toggled")
+			PsTarget.ACT_PAD_MODE_NEXT -> toast("Touchpad mode: ${SteamController.mapper.effectivePadMode.label}")
+			else -> {}
+		}
+	}
+
+	private val steamStatusCallback: () -> Unit = {
+		if(!SteamController.isConnected)
+		{
+			viewModel.input.clearSteamState()
+			if(SteamController.status == SteamController.Status.DISCONNECTED)
+				toast(SteamController.lastError ?: "Steam Controller disconnected")
+		}
+		updateBridgeStatus()
+	}
+
+	private fun setupSteamController()
+	{
+		viewModel.input.attachSteamController()
+		SteamController.reloadProfile()
+
+		SteamController.onAction = steamActionCallback
+		SteamController.onStatusChanged = steamStatusCallback
+
+		if(!SteamController.isConnected)
+		{
+			val needsBtPermission = steamStore.transport == com.metallic.chiaki.steam.TransportChoice.BLUETOOTH &&
+				Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+				ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+			if(needsBtPermission)
+				toast("Open Steam Controller settings once to grant Bluetooth permission")
+			else
+			{
+				SteamController.autoStop = true
+				SteamController.start()
+			}
+		}
+		updateBridgeStatus()
+	}
+
+	private fun updateBridgeStatus()
+	{
+		val tv = bridgeStatusView ?: return
+		val c = when(SteamController.status)
+		{
+			SteamController.Status.CONNECTED -> "Steam Controller connected"
+			SteamController.Status.CONNECTING -> "Connecting to Steam Controller..."
+			SteamController.Status.WAITING_USB_PERMISSION -> "Allow USB access for the Steam Controller"
+			SteamController.Status.DISCONNECTED -> "Steam Controller not connected"
+		}
+		tv.text = "Controller bridge mode\nVideo is off, play on your TV\n\n$c"
+	}
+
+	private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+
+	private fun startMicIfWanted()
+	{
+		if(mic != null || !steamStore.micEnabled || !com.metallic.chiaki.lib.Session.micSupported)
+			return
+		if(ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+		{
+			micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+			return
+		}
+		val session = viewModel.session.session ?: return
+		val m = MicCapture(session)
+		if(m.start(steamStore.micStartMuted))
+			mic = m
+		else
+			toast("Could not start the microphone")
+	}
+
+	private fun stopMic()
+	{
+		mic?.stop()
+		mic = null
 	}
 
 	private fun reconnect()
@@ -355,7 +591,8 @@ class StreamActivity : AppCompatActivity(), View.OnSystemUiVisibilityChangeListe
 				}
 			}
 			// These states don't need special handling
-			StreamStateIdle, StreamStateConnecting, StreamStateConnected -> { }
+			StreamStateConnected -> startMicIfWanted()
+			StreamStateIdle, StreamStateConnecting -> { }
 		}
 	}
 

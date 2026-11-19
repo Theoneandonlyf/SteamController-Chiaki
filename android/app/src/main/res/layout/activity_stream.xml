@@ -72,6 +72,40 @@
                 android:textColor="@color/stream_text"/>
 
 
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/videoSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:layout_constraintStart_toEndOf="@id/onScreenControlsSwitch"
+                app:layout_constraintBottom_toBottomOf="parent"
+                android:text="Video"
+                app:switchPadding="8dp"
+                android:layout_marginLeft="24dp"
+                android:textColor="@color/stream_text"/>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/audioSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:layout_constraintStart_toEndOf="@id/videoSwitch"
+                app:layout_constraintBottom_toBottomOf="parent"
+                android:text="Audio"
+                app:switchPadding="8dp"
+                android:layout_marginLeft="16dp"
+                android:textColor="@color/stream_text"/>
+
+            <com.google.android.material.button.MaterialButton
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:id="@+id/resyncButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Resync"
+                android:textColor="@color/stream_text"
+                app:strokeColor="@color/stream_text"
+                app:layout_constraintStart_toEndOf="@id/audioSwitch"
+                app:layout_constraintBottom_toBottomOf="parent"
+                android:layout_marginLeft="16dp" />
+
             <com.google.android.material.button.MaterialButtonToggleGroup
                 android:id="@+id/displayModeToggle"
                 android:layout_width="wrap_content"

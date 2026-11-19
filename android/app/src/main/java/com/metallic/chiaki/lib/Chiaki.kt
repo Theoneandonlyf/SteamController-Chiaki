@@ -93,6 +93,11 @@ private class ChiakiNative
 		@JvmStatic external fun sessionSetSurface(ptr: Long, surface: Surface?)
 		@JvmStatic external fun sessionSetControllerState(ptr: Long, controllerState: ControllerState)
 		@JvmStatic external fun sessionSetLoginPin(ptr: Long, pin: String)
+		@JvmStatic external fun micSupported(): Boolean
+		@JvmStatic external fun sessionMicInit(ptr: Long): Boolean
+		@JvmStatic external fun sessionMicFrame(ptr: Long, pcm: ShortArray)
+		@JvmStatic external fun sessionMicMute(ptr: Long, muted: Boolean)
+		@JvmStatic external fun sessionSetAudioMuted(ptr: Long, muted: Boolean)
 		@JvmStatic external fun discoveryServiceCreate(result: CreateResult, options: DiscoveryServiceOptions, javaService: DiscoveryService)
 		@JvmStatic external fun discoveryServiceFree(ptr: Long)
 		@JvmStatic external fun discoveryServiceWakeup(ptr: Long, host: String, userCredential: Long, ps5: Boolean)
@@ -390,6 +395,17 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean)
 	fun setLoginPin(pin: String)
 	{
 		ChiakiNative.sessionSetLoginPin(nativePtr, pin)
+	}
+
+	// Headset microphone (party chat). All no-ops unless the app was built with steamMic=true.
+	fun micInit(): Boolean = nativePtr != 0L && ChiakiNative.sessionMicInit(nativePtr)
+	fun micFrame(pcm: ShortArray) { if(nativePtr != 0L) ChiakiNative.sessionMicFrame(nativePtr, pcm) }
+	fun micMute(muted: Boolean) { if(nativePtr != 0L) ChiakiNative.sessionMicMute(nativePtr, muted) }
+	fun setAudioMuted(muted: Boolean) { if(nativePtr != 0L) ChiakiNative.sessionSetAudioMuted(nativePtr, muted) }
+
+	companion object
+	{
+		val micSupported: Boolean get() = try { ChiakiNative.micSupported() } catch(_: Throwable) { false }
 	}
 }
 

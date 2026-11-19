@@ -1150,7 +1150,7 @@ static ChiakiErrorCode stream_connection_enable_microphone(ChiakiStreamConnectio
 	memset(&msg, 0, sizeof(msg));
 
 	ChiakiAudioHeader audio_header_input;
-	chiaki_audio_header_set(&audio_header_input, 16, 1, 48000, 480);
+	chiaki_audio_header_set(&audio_header_input, 1, 16, 48000, 480);
 	uint8_t audio_header[CHIAKI_AUDIO_HEADER_SIZE];
 	chiaki_audio_header_save(&audio_header_input, audio_header);
 	ChiakiPBBuf audio_header_buf = { sizeof(audio_header), (uint8_t *)audio_header };
@@ -1172,6 +1172,25 @@ static ChiakiErrorCode stream_connection_enable_microphone(ChiakiStreamConnectio
 	if(!pbr)
 	{
 		CHIAKI_LOGE(stream_connection->log, "StreamConnection controller connection protobuf encoding failed");
+		return CHIAKI_ERR_UNKNOWN;
+	}
+
+	buf_size = stream.bytes_written;
+	ChiakiErrorCode err = chiaki_takion_send_message_data(&stream_connection->takion, 1, 1, buf, buf_size, NULL);
+	if(err != CHIAKI_ERR_SUCCESS)
+		return err;
+
+	memset(&msg, 0, sizeof(msg));
+	msg.type = tkproto_TakionMessage_PayloadType_MICCONNECTION;
+	msg.has_mic_connection_payload = true;
+	msg.mic_connection_payload.controller_id = 0;
+	msg.mic_connection_payload.connected = true;
+
+	stream = pb_ostream_from_buffer(buf, sizeof(buf));
+	pbr = pb_encode(&stream, tkproto_TakionMessage_fields, &msg);
+	if(!pbr)
+	{
+		CHIAKI_LOGE(stream_connection->log, "StreamConnection mic connection payload protobuf encoding failed");
 		return CHIAKI_ERR_UNKNOWN;
 	}
 

@@ -9,6 +9,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.OnLifecycleEvent
 import com.metallic.chiaki.common.Preferences
 import com.metallic.chiaki.lib.ControllerState
+import com.metallic.chiaki.steam.SteamController
 
 class StreamInput(val context: Context, val preferences: Preferences)
 {
@@ -40,7 +41,49 @@ class StreamInput(val context: Context, val preferences: Preferences)
 		if(motionControllerState.r2State > 0U)
 			controllerState.r2State = motionControllerState.r2State
 
-		return controllerState or touchControllerState
+		val merged = controllerState or touchControllerState
+
+		// Steam Controller (read directly over USB/BLE, mapped to DualSense semantics)
+		val steam = steamControllerState
+		if(steam != null)
+		{
+			val combined = merged or steam
+			// While a Steam Controller is connected its IMU is the only motion source:
+			// real data when gyro is active, neutral otherwise (never the phone's sensors).
+			combined.gyroX = steam.gyroX; combined.gyroY = steam.gyroY; combined.gyroZ = steam.gyroZ
+			combined.accelX = steam.accelX; combined.accelY = steam.accelY; combined.accelZ = steam.accelZ
+			combined.orientX = steam.orientX; combined.orientY = steam.orientY; combined.orientZ = steam.orientZ; combined.orientW = steam.orientW
+			return combined
+		}
+		return merged
+	}
+
+	@Volatile private var steamControllerState: ControllerState? = null
+
+	/** Start receiving mapped Steam Controller frames. */
+	private val steamCallback: (ControllerState) -> Unit = {
+		steamControllerState = it
+		controllerStateUpdated()
+	}
+
+	fun attachSteamController()
+	{
+		SteamController.onControllerState = steamCallback
+	}
+
+	/** The controller went away mid-stream: release everything it was holding. */
+	fun clearSteamState()
+	{
+		steamControllerState = ControllerState()
+		controllerStateUpdated()
+	}
+
+	fun detachSteamController()
+	{
+		// A restarted stream attaches its own input before this one is destroyed; don't undo that.
+		if(SteamController.onControllerState === steamCallback)
+			SteamController.onControllerState = null
+		steamControllerState = null
 	}
 
 	private val sensorControllerState = ControllerState() // from Motion Sensors
@@ -55,6 +98,12 @@ class StreamInput(val context: Context, val preferences: Preferences)
 
 	private val swapCrossMoon = preferences.swapCrossMoon
 
+	private var lastOrientX = 0f
+	private var lastOrientY = 0f
+	private var lastOrientZ = 0f
+	private var lastOrientW = 1f
+	private var hasOrient = false
+
 	private val sensorEventListener = object: SensorEventListener {
 		override fun onSensorChanged(event: SensorEvent)
 		{
@@ -66,17 +115,38 @@ class StreamInput(val context: Context, val preferences: Preferences)
 					sensorControllerState.accelZ = event.values[0] / SensorManager.GRAVITY_EARTH
 				}
 				Sensor.TYPE_GYROSCOPE -> {
-					sensorControllerState.gyroX = event.values[1]
-					sensorControllerState.gyroY = event.values[2]
-					sensorControllerState.gyroZ = event.values[0]
+					val rawX = event.values[1]
+					val rawY = event.values[2]
+					val rawZ = event.values[0]
+					val deadzone = 0.02f
+					sensorControllerState.gyroX = if(kotlin.math.abs(rawX) < deadzone) 0f else rawX
+					sensorControllerState.gyroY = if(kotlin.math.abs(rawY) < deadzone) 0f else rawY
+					sensorControllerState.gyroZ = if(kotlin.math.abs(rawZ) < deadzone) 0f else rawZ
 				}
 				Sensor.TYPE_ROTATION_VECTOR -> {
 					val q = floatArrayOf(0f, 0f, 0f, 0f)
 					SensorManager.getQuaternionFromVector(q, event.values)
-					sensorControllerState.orientX = q[2]
-					sensorControllerState.orientY = q[3]
-					sensorControllerState.orientZ = q[1]
-					sensorControllerState.orientW = q[0]
+					val targetX = q[2]
+					val targetY = q[3]
+					val targetZ = q[1]
+					val targetW = q[0]
+					if(!hasOrient)
+					{
+						lastOrientX = targetX; lastOrientY = targetY; lastOrientZ = targetZ; lastOrientW = targetW
+						hasOrient = true
+					}
+					else
+					{
+						val alpha = 0.2f
+						lastOrientX += alpha * (targetX - lastOrientX)
+						lastOrientY += alpha * (targetY - lastOrientY)
+						lastOrientZ += alpha * (targetZ - lastOrientZ)
+						lastOrientW += alpha * (targetW - lastOrientW)
+					}
+					sensorControllerState.orientX = lastOrientX
+					sensorControllerState.orientY = lastOrientY
+					sensorControllerState.orientZ = lastOrientZ
+					sensorControllerState.orientW = lastOrientW
 				}
 				else -> return
 			}

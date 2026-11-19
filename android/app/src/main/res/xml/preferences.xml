@@ -13,6 +13,12 @@
             app:fragment="com.metallic.chiaki.settings.SettingsRegisteredHostsFragment"
             app:icon="@drawable/ic_console_simple"/>
 
+        <Preference
+            app:key="steam_controller_settings"
+            app:title="Steam Controller"
+            app:summary="Connection, buttons, touchpads, gyro, video-off bridge mode, headset mic"
+            app:icon="@drawable/ic_gamepad" />
+
         <SwitchPreference
             app:key="@string/preferences_swap_cross_moon_key"
             app:title="@string/preferences_swap_cross_moon_title"

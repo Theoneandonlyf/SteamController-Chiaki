@@ -152,8 +152,13 @@ bool android_chiaki_video_decoder_video_sample(uint8_t *buf, size_t buf_size,
   chiaki_mutex_lock(&decoder->codec_mutex);
 
   if (!decoder->codec) {
-    CHIAKI_LOGE(decoder->log,
-                "Received video data, but decoder is not initialized!");
+    // Expected in "video disabled" mode (no surface, no decoder): drop frames, log once.
+    static bool logged = false;
+    if (!logged) {
+      logged = true;
+      CHIAKI_LOGI(decoder->log, "Received video data but no decoder is active; "
+                                "dropping frames (video disabled or no surface)");
+    }
     goto beach;
   }
 

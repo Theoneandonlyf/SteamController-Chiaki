@@ -34,9 +34,18 @@ struct AudioOutput
 	oboe::ManagedStream stream;
 	AudioOutputCallback stream_callback;
 	AudioBuffer buf;
+	bool muted;
 
-	AudioOutput() : stream_callback(this) {}
+	AudioOutput() : stream_callback(this), muted(false) {}
 };
+
+extern "C" void android_chiaki_audio_output_set_muted(bool muted, void *audio_output)
+{
+	if(!audio_output)
+		return;
+	auto ao = reinterpret_cast<AudioOutput *>(audio_output);
+	ao->muted = muted;
+}
 
 extern "C" void *android_chiaki_audio_output_new(ChiakiLog *log)
 {
@@ -91,6 +100,15 @@ extern "C" void android_chiaki_audio_output_frame(int16_t *buf, size_t samples_c
 
 oboe::DataCallbackResult AudioOutputCallback::onAudioReady(oboe::AudioStream *stream, void *audio_data, int32_t num_frames)
 {
+	if(audio_output->muted)
+	{
+		int32_t bytes_per_frame = stream->getBytesPerFrame();
+		size_t buf_size_requested = static_cast<size_t>(bytes_per_frame * num_frames);
+		auto buf = reinterpret_cast<uint8_t *>(audio_data);
+		memset(buf, 0, buf_size_requested);
+		return oboe::DataCallbackResult::Continue;
+	}
+
 	if(stream->getFormat() != oboe::AudioFormat::I16)
 	{
 		CHIAKI_LOGE(audio_output->log, "Oboe stream has invalid format in callback");

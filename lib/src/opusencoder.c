@@ -51,9 +51,12 @@ CHIAKI_EXPORT void chiaki_opus_encoder_header(ChiakiAudioHeader *header, ChiakiO
 		return;
 	}
 
+	opus_encoder_ctl(encoder->opus_encoder, OPUS_SET_BITRATE(32000));
+	opus_encoder_ctl(encoder->opus_encoder, OPUS_SET_VBR(0));
+
 	CHIAKI_LOGI(encoder->log, "ChiakiOpusEncoder initialized");
 
-	size_t opus_frame_buf_size_required = 40;
+	size_t opus_frame_buf_size_required = 4000;
 	uint8_t *opus_frame_buf_old = encoder->opus_frame_buf;
 	if(!encoder->opus_frame_buf || encoder->opus_frame_buf_size != opus_frame_buf_size_required)
 		encoder->opus_frame_buf = realloc(encoder->opus_frame_buf, opus_frame_buf_size_required);
