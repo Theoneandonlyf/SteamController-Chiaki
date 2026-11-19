@@ -57,7 +57,6 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		key == preferences.fpsKey -> preferences.fps.value
 		key == preferences.bitrateKey -> preferences.bitrate?.toString() ?: ""
 		key == preferences.codecKey -> preferences.codec.value
-		key.startsWith("mapping_") -> preferences.sharedPreferences.getString(key, defValue)
 		else -> defValue
 	}
 
@@ -80,10 +79,6 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			{
 				val codec = Preferences.Codec.values().firstOrNull { it.value == value } ?: return
 				preferences.codec = codec
-			}
-			key.startsWith("mapping_") -> 
-			{
-				preferences.sharedPreferences.edit().putString(key, value).apply()
 			}
 		}
 	}
